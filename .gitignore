@@ -1,0 +1,25 @@
+# Generated data artifacts -- fully reproducible from generate_data.py /
+# causal_model.py / uplift.py with seed=42. Never commit these; commit the
+# code that produces them instead.
+data/*.csv
+outputs/*.csv
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# OS / editor noise
+.DS_Store
+.vscode/
+.idea/
+
+# Secrets -- never committed, ever
+.env
+*.pem
+*.key

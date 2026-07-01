@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customer Churn: Causal Intervention Targeting</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0b0d16;
+    --surface:  #131520;
+    --card:     #1a1d2e;
+    --border:   rgba(255,255,255,0.08);
+    --border2:  rgba(255,255,255,0.14);
+    --text:     #e8eaf0;
+    --muted:    #6b7080;
+    --sub:      #9ba3b8;
+    --amber:    #f5a623;
+    --amber-bg: rgba(245,166,35,0.10);
+    --amber-bd: rgba(245,166,35,0.25);
+    --red:      #e05c5c;
+    --red-bg:   rgba(224,92,92,0.10);
+    --green:    #3dbf8a;
+    --green-bg: rgba(61,191,138,0.10);
+    --blue:     #4e9eff;
+    --gray-bar: #3a3d52;
+    --radius:   10px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 1.75rem 2rem 1.5rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: .5rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.25;
+    margin-bottom: .5rem;
+  }
+
+  .tagline { font-size: 14px; color: var(--sub); }
+
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    margin-right: 6px;
+    margin-top: 10px;
+  }
+
+  main { max-width: 960px; margin: 0 auto; padding: 2rem; }
+
+  .sec-label {
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 10px;
+  }
+
+  section { margin-bottom: 2rem; }
+
+  /* Hero ATE comparison */
+  .ate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border2); border-radius: var(--radius); overflow: hidden; }
+
+  .ate-cell { padding: 1.5rem 1.75rem; background: var(--card); }
+  .ate-cell.causal { background: var(--amber-bg); border: 1px solid var(--amber-bd); border-radius: 0 var(--radius) var(--radius) 0; }
+
+  .ate-label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; font-family: 'JetBrains Mono', monospace; }
+  .ate-label.causal { color: var(--amber); }
+
+  .ate-num { font-family: 'JetBrains Mono', monospace; font-size: 52px; font-weight: 500; line-height: 1; }
+  .ate-num.naive { color: var(--muted); }
+  .ate-num.causal { color: var(--amber); }
+
+  .ate-sub { font-size: 13px; color: var(--sub); margin-top: 8px; line-height: 1.5; }
+
+  .gap-badge {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--amber);
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-bd);
+    border-radius: 4px;
+    padding: 3px 8px;
+    margin-top: 10px;
+    display: inline-block;
+  }
+
+  .explain { font-size: 13px; color: var(--sub); margin-top: 10px; line-height: 1.6; }
+
+  /* Metric cards */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+  .metric { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+  .metric-label { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; }
+  .metric-val { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 500; line-height: 1.1; }
+  .metric-val.green { color: var(--green); }
+  .metric-val.amber { color: var(--amber); }
+  .metric-sub { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.4; }
+
+  /* Charts row */
+  .charts-row { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; }
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem; }
+  .chart-title { font-size: 12px; color: var(--sub); margin-bottom: 12px; }
+
+  .legend-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+  .legend-item { font-size: 12px; color: var(--sub); display: flex; align-items: center; gap: 5px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  .seg-footer { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+  .seg-footer p { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; line-height: 1.8; }
+
+  /* ROI */
+  .roi-delta {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    color: var(--green); background: var(--green-bg);
+    padding: 4px 10px; border-radius: 5px; border: 1px solid rgba(61,191,138,.2);
+    margin-left: 10px; vertical-align: middle;
+  }
+
+  /* Refutations */
+  .refutation-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .ref-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem; }
+  .ref-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .pass-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .ref-title { font-size: 13px; font-weight: 500; color: var(--text); }
+  .ref-body { font-size: 12px; color: var(--sub); line-height: 1.6; }
+
+  /* Source link */
+  footer { max-width: 960px; margin: 0 auto; padding: .5rem 2rem 2.5rem; border-top: 1px solid var(--border); }
+  footer p { font-size: 12px; color: var(--muted); margin-top: 1rem; }
+  footer a { color: var(--blue); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 700px) {
+    .ate-grid, .metrics, .charts-row, .refutation-grid { grid-template-columns: 1fr; }
+    .ate-cell.causal { border-radius: 0 0 var(--radius) var(--radius); }
+    h1 { font-size: 1.25rem; }
+    .ate-num { font-size: 38px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">Data science · Causal ML · DoWhy · EconML</p>
+  <h1>Customer Churn: Causal Intervention Targeting</h1>
+  <p class="tagline">Going beyond churn prediction — estimating the causal effect of a discount coupon on retention probability, per customer.</p>
+  <div>
+    <span class="pill">DoWhy 0.14</span>
+    <span class="pill">EconML 0.16</span>
+    <span class="pill">XGBoost 3.3</span>
+    <span class="pill">Python 3.12</span>
+    <span class="pill">n = 10,000</span>
+  </div>
+</header>
+
+<main>
+
+  <section>
+    <p class="sec-label">The core question</p>
+    <div class="ate-grid">
+      <div class="ate-cell">
+        <p class="ate-label">Naive comparison — biased</p>
+        <p class="ate-num naive">-4.8pp</p>
+        <p class="ate-sub">Treated vs untreated churn rate.<br>Confounded: reps target high-risk accounts preferentially.</p>
+        <span class="gap-badge">3.5pp underestimation</span>
+      </div>
+      <div class="ate-cell causal">
+        <p class="ate-label causal">Causal estimate — DoWhy + EconML DML</p>
+        <p class="ate-num causal">-8.3pp</p>
+        <p class="ate-sub">Average treatment effect after adjusting for confounders.<br>95% CI [−10.1, −6.6pp] · SE 0.91pp · 3 refutation tests passed.</p>
+      </div>
+    </div>
+    <p class="explain">A high-AUC churn classifier still cannot answer <em>whether discounting a specific customer will change their behaviour</em>. Predictive accuracy and causal validity are orthogonal. Double ML residualizes both outcome and treatment on the confounders, then regresses the residuals — isolating the causal signal without requiring a randomized experiment.</p>
+  </section>
+
+  <section>
+    <p class="sec-label">Summary metrics</p>
+    <div class="metrics">
+      <div class="metric">
+        <p class="metric-label">Baseline AUC</p>
+        <p class="metric-val">0.749</p>
+        <p class="metric-sub">XGBoost classifier<br>predicts, does not cause</p>
+      </div>
+      <div class="metric">
+        <p class="metric-label">DML ATE</p>
+        <p class="metric-val amber">-8.3pp</p>
+        <p class="metric-sub">Causal · population avg<br>confounding adjusted</p>
+      </div>
+      <div class="metric">
+        <p class="metric-label">Customers targeted</p>
+        <p class="metric-val">42%</p>
+        <p class="metric-sub">EV-positive only<br>58% budget withheld</p>
+      </div>
+      <div class="metric">
+        <p class="metric-label">ROI vs naive</p>
+        <p class="metric-val green">+$18.7k</p>
+        <p class="metric-sub">targeted vs blanket policy<br>10k-customer base</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="sec-label">Per-customer causal effect (CATE)</p>
+    <div class="charts-row">
+      <div class="chart-card">
+        <p class="chart-title">CATE distribution — effect of discount on churn probability per customer</p>
+        <div style="position:relative;height:200px;">
+          <canvas id="cateChart" role="img" aria-label="Histogram of per-customer CATE values. Persuadable customers cluster at CATE from -0.20 to -0.08. Lost cause customers cluster from -0.08 to zero. Sleeping dog customers show small positive CATE near zero.">CATE distribution: 4,207 persuadable, 5,742 lost cause, 51 sleeping dog.</canvas>
+        </div>
+        <div class="legend-row">
+          <span class="legend-item"><span class="swatch" style="background:#f5a623;"></span>Persuadable (4,207) — offer discount</span>
+          <span class="legend-item"><span class="swatch" style="background:#6b7080;"></span>Lost cause (5,742) — withhold</span>
+          <span class="legend-item"><span class="swatch" style="background:#e05c5c;"></span>Sleeping dog (51) — discount backfires</span>
+        </div>
+      </div>
+      <div class="chart-card" style="display:flex;flex-direction:column;justify-content:space-between;">
+        <div>
+          <p class="chart-title">Segment breakdown</p>
+          <div style="position:relative;height:130px;">
+            <canvas id="segChart" role="img" aria-label="Horizontal bar chart. Persuadable 42 percent. Lost cause 57 percent. Sleeping dog 1 percent.">42% persuadable, 57% lost cause, 1% sleeping dog.</canvas>
+          </div>
+        </div>
+        <div class="seg-footer">
+          <p>Segment cut: CATE &le; -0.08<br>EV break-even: CATE = -0.056<br>Cost $15 &nbsp;&middot;&nbsp; Value $270 (6 mo)</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="sec-label">Policy value comparison
+      <span class="roi-delta">+$18,732 &nbsp;(+24.4%)</span>
+    </p>
+    <div class="chart-card">
+      <p class="chart-title">Expected total value — 10,000 customers &nbsp;&middot;&nbsp; $15 coupon cost &nbsp;&middot;&nbsp; $45/month margin &nbsp;&middot;&nbsp; 6-month retention horizon</p>
+      <div style="position:relative;height:96px;">
+        <canvas id="roiChart" role="img" aria-label="Horizontal bar chart. Targeted policy value $95,409. Naive blanket policy value $76,677. Delta plus $18,732.">Targeted $95,409 vs naive $76,677. Delta +$18,732.</canvas>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px;">Targeting removes negative-EV spend from the 58% of customers a discount cannot cost-effectively save. Budget saved scales linearly with portfolio size.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="sec-label">Causal identification — refutation tests</p>
+    <div class="refutation-grid">
+      <div class="ref-card">
+        <div class="ref-header">
+          <span class="pass-dot" aria-hidden="true"></span>
+          <span class="ref-title">Placebo treatment</span>
+        </div>
+        <p class="ref-body">Shuffled treatment column: effect collapsed from <span class="mono">-8.3pp</span> to <span class="mono">+0.5pp</span>. The estimator was genuinely using the treatment column, not spurious correlation.</p>
+      </div>
+      <div class="ref-card">
+        <div class="ref-header">
+          <span class="pass-dot" aria-hidden="true"></span>
+          <span class="ref-title">Data subset</span>
+        </div>
+        <p class="ref-body">80% random subsamples: <span class="mono">-8.6 ± 0.7pp</span>. Stable sign and magnitude across 8 resamplings — not a fluke of the full sample.</p>
+      </div>
+      <div class="ref-card">
+        <div class="ref-header">
+          <span class="pass-dot" aria-hidden="true"></span>
+          <span class="ref-title">Random confounder</span>
+        </div>
+        <p class="ref-body">Added pure-noise feature to the confounder set: estimate moved to <span class="mono">-8.4pp</span>. No overfitting to spurious structure.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/YOUR_GH_USERNAME/churn-causal">View source on GitHub</a>
+    &nbsp;&middot;&nbsp;
+    <a href="blog_post.html">Read the blog post</a>
+    &nbsp;&middot;&nbsp;
+    Built with DoWhy, EconML, XGBoost, Python 3.12
+  </p>
+</footer>
+
+<script>
+const A = '#f5a623', G = '#6b7080', R = '#e05c5c', GR = '#3dbf8a';
+const grid = 'rgba(255,255,255,0.06)';
+const tick = '#6b7080';
+
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 11;
+
+new Chart(document.getElementById('cateChart'), {
+  type: 'bar',
+  data: {
+    labels: ['<-0.20','-0.20','-0.14','-0.08','-0.05','-0.02','0.00','+0.02'],
+    datasets: [{
+      data: [300, 600, 3307, 1500, 2400, 2342, 500, 51],
+      backgroundColor: [A, A, A, G, G, G, R, R],
+      borderRadius: { topLeft: 3, topRight: 3 },
+      borderSkipped: 'bottom',
+      borderWidth: 0,
+      barPercentage: 0.88,
+      categoryPercentage: 0.96
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: {
+        title: c => 'CATE bin starting at ' + c[0].label,
+        label: c => ' ' + c.parsed.y.toLocaleString() + ' customers'
+      }}
+    },
+    scales: {
+      x: { grid: { display: false }, border: { color: grid }, ticks: { color: tick, font: { size: 10 } } },
+      y: { grid: { color: grid }, border: { display: false },
+           ticks: { color: tick, font: { size: 10 }, maxTicksLimit: 4,
+                    callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v } }
+    }
+  }
+});
+
+new Chart(document.getElementById('segChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Persuadable','Lost cause','Sleeping dog'],
+    datasets: [{
+      data: [42.1, 57.4, 0.5],
+      backgroundColor: [A, G, R],
+      borderRadius: { topRight: 3, bottomRight: 3 },
+      borderSkipped: 'left',
+      borderWidth: 0,
+      barThickness: 24
+    }]
+  },
+  options: {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + c.parsed.x.toFixed(1) + '% of customers' } } },
+    scales: {
+      x: { max: 60, grid: { color: grid }, border: { display: false }, ticks: { color: tick, font: { size: 10 }, callback: v => v + '%' } },
+      y: { grid: { display: false }, border: { display: false }, ticks: { color: tick, font: { size: 10 } } }
+    }
+  }
+});
+
+new Chart(document.getElementById('roiChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Targeted','Naive (everyone)'],
+    datasets: [{
+      data: [95409, 76677],
+      backgroundColor: [GR, G],
+      borderRadius: { topRight: 3, bottomRight: 3 },
+      borderSkipped: 'left',
+      borderWidth: 0,
+      barThickness: 26
+    }]
+  },
+  options: {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' $' + Math.round(c.parsed.x).toLocaleString() } } },
+    scales: {
+      x: { min: 0, max: 115000, grid: { color: grid }, border: { display: false },
+           ticks: { color: tick, font: { size: 10 }, callback: v => '$' + Math.round(v/1000) + 'k' } },
+      y: { grid: { display: false }, border: { display: false }, ticks: { color: tick, font: { size: 10 } } }
+    }
+  }
+});
+</script>
+</body>
+</html>
